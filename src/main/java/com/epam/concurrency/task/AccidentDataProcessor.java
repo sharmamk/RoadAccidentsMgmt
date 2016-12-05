@@ -1,11 +1,17 @@
 package com.epam.concurrency.task;
 
-import com.epam.data.RoadAccident;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.epam.data.RoadAccident;
 
 /**
  * Created by Tanmoy on 6/17/2016.
@@ -39,7 +45,7 @@ public class AccidentDataProcessor {
         accidentDataWriter.init(OUTPUT_FILE_PATH);
     }
 
-    public void process(){
+    public void process() throws InterruptedException, ExecutionException{
         for (String accidentDataFile : fileQueue){
             log.info("Starting to process {} file ", accidentDataFile);
             accidentDataReader.init(DATA_PROCESSING_BATCH_SIZE, accidentDataFile);
@@ -47,22 +53,49 @@ public class AccidentDataProcessor {
         }
     }
 
-    private void processFile(){
+    private void processFile() throws InterruptedException, ExecutionException{
         int batchCount = 1;
+        ExecutorService executorService = Executors.newFixedThreadPool(3);
         while (!accidentDataReader.hasFinished()){
-            List<RoadAccident> roadAccidents = accidentDataReader.getNextBatch();
-            log.info("Read [{}] records in batch [{}]", roadAccidents.size(), batchCount++);
-            List<RoadAccidentDetails> roadAccidentDetailsList = accidentDataEnricher.enrichRoadAccidentData(roadAccidents);
-            log.info("Enriched records");
-            accidentDataWriter.writeAccidentData(roadAccidentDetailsList);
-            log.info("Written records");
+        	Future<List<RoadAccident>> roadAccidentsFuture = executorService.submit(new Runnable() {				
+				@Override
+				public void run() {
+					// TODO Auto-generated method stub
+					
+				}
+			}, accidentDataReader.getNextBatch());
+        	List<RoadAccident> roadAccidents = roadAccidentsFuture.get();
+        	log.info("Read [{}] records in batch [{}]", roadAccidents.size(), batchCount++);
+        	
+        	Future<List<RoadAccidentDetails>> enricherFuture = executorService.submit(new Callable<List<RoadAccidentDetails>>() {
+				@Override
+				public List<RoadAccidentDetails> call() throws Exception {
+					return accidentDataEnricher.enrichRoadAccidentData(roadAccidents);
+				}
+        		
+			});
+        	log.info("Enriched records");
+        	List<RoadAccidentDetails> roadAccidentDetailsList = enricherFuture.get();
+        	
+        	executorService.submit(new Runnable() {
+				@Override
+				public void run() {
+					 accidentDataWriter.writeAccidentData(roadAccidentDetailsList);
+				}
+			});
+        	log.info("Written records");
+        	
         }
+        
+        executorService.shutdown();
     }
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
         AccidentDataProcessor dataProcessor = new AccidentDataProcessor();
+        
         long start = System.currentTimeMillis();
+        
         dataProcessor.init();
         dataProcessor.process();
         long end = System.currentTimeMillis();
