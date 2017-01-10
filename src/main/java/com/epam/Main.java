@@ -12,11 +12,12 @@ import java.util.List;
 public class Main {
 
     private static final String ACCIDENTS_CSV = "src/main/resources/DfTRoadSafety_Accidents_2009.csv";
-
+ 
 
     public static void main(String[] args) throws IOException {
         AccidentsDataLoader accidentsDataLoader = new AccidentsDataLoader();
         List<RoadAccident> accidents = accidentsDataLoader.loadRoadAccidents(ACCIDENTS_CSV);
+        System.out.println("The size of ACCIDENTS_CSV:"+accidents.size());
 
 
     }
